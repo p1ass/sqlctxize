@@ -65,30 +65,43 @@ func main() {
 
 	for _, file := range parsedFiles {
 		ast.Inspect(file, func(n ast.Node) bool {
-			if callExpr, ok := n.(*ast.CallExpr); ok {
-				if selExpr, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
+			switch node := n.(type) {
+			case *ast.CallExpr:
+				if selExpr, ok := node.Fun.(*ast.SelectorExpr); ok {
 					tv, ok := info.Types[selExpr.X]
-					if ok && tv.Type != nil {
-						if ptr, ok := tv.Type.(*types.Pointer); ok {
-							if named, ok := ptr.Elem().(*types.Named); ok {
-								if named.Obj().Pkg().Path() == "database/sql" && named.Obj().Name() == "DB" {
-									if newMethod, exists := contextMethods[selExpr.Sel.Name]; exists {
-										selExpr.Sel.Name = newMethod
-										args := []ast.Expr{
-											&ast.CallExpr{
-												Fun: &ast.SelectorExpr{
-													X:   ast.NewIdent("context"),
-													Sel: ast.NewIdent("Background"),
-												},
-											},
+					if !ok || tv.Type == nil {
+						return true
+					}
+					if ptr, ok := tv.Type.(*types.Pointer); ok {
+						if named, ok := ptr.Elem().(*types.Named); ok {
+							if named.Obj().Pkg().Path() == "database/sql" && named.Obj().Name() == "DB" {
+								if newMethod, exists := contextMethods[selExpr.Sel.Name]; exists {
+									selExpr.Sel.Name = newMethod
+
+									if ident, isIdent := selExpr.X.(*ast.Ident); isIdent && ident.Obj != nil && ident.Obj.Decl != nil {
+										if funDecl, isFuncDecl := ident.Obj.Decl.(*ast.FuncDecl); isFuncDecl {
+											ctxExpr := ast.NewIdent("ctx")
+											if isCtxAvailable(funDecl) {
+												node.Args = append([]ast.Expr{ctxExpr}, node.Args...)
+											} else {
+												addContextParam(funDecl.Type)
+												node.Args = append([]ast.Expr{&ast.CallExpr{
+													Fun: &ast.SelectorExpr{
+														X:   ast.NewIdent("context"),
+														Sel: ast.NewIdent("Background"),
+													},
+												}}, node.Args...)
+											}
 										}
-										args = append(args, callExpr.Args...)
-										callExpr.Args = args
 									}
 								}
 							}
 						}
 					}
+				}
+			case *ast.FuncDecl:
+				if !isCtxAvailable(node) {
+					addContextParam(node.Type)
 				}
 			}
 			return true
@@ -101,7 +114,28 @@ func main() {
 		err = format.Node(&buf, fset, file)
 		if err != nil { /* エラー処理 */
 		}
-		// v + 1
 		fmt.Println(buf.String())
 	}
+}
+
+func isCtxAvailable(funDecl *ast.FuncDecl) bool {
+	for _, param := range funDecl.Type.Params.List {
+		for _, name := range param.Names {
+			if name.Name == "ctx" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func addContextParam(fun *ast.FuncType) {
+	if fun.Params == nil {
+		fun.Params = &ast.FieldList{}
+	}
+	ctxField := &ast.Field{
+		Names: []*ast.Ident{ast.NewIdent("ctx")},
+		Type:  &ast.SelectorExpr{X: ast.NewIdent("context"), Sel: ast.NewIdent("Context")},
+	}
+	fun.Params.List = append([]*ast.Field{ctxField}, fun.Params.List...)
 }
