@@ -88,6 +88,7 @@ func main() {
 				fmt.Println(hasHttpParams(node))
 				if !isCtxAvailable(node) && !hasHttpParams(node) {
 					addContextParam(node.Type)
+					modifyFuncCalls(node.Name.Name, file)
 				}
 			}
 			return true
@@ -135,8 +136,6 @@ func isSelectorExprOfType(expr ast.Expr, pkg string, name string) bool {
 
 func isStarExprOfType(expr ast.Expr, pkg, typeName string) bool {
 	if star, ok := expr.(*ast.StarExpr); ok {
-		fmt.Println(star.X)
-		fmt.Printf("%T\n", star.X)
 		if ident, ok := star.X.(*ast.SelectorExpr); ok {
 			return isSelectorExprOfType(ident, pkg, typeName)
 		}
@@ -154,4 +153,32 @@ func addContextParam(fun *ast.FuncType) {
 		Type:  &ast.SelectorExpr{X: ast.NewIdent("context"), Sel: ast.NewIdent("Context")},
 	}
 	fun.Params.List = append([]*ast.Field{ctxField}, fun.Params.List...)
+}
+
+// 関数の呼び出しを修正するためのヘルパー関数
+func modifyFuncCalls(name string, file *ast.File) {
+	ast.Inspect(file, func(n ast.Node) bool {
+		callExpr, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		ident, ok := callExpr.Fun.(*ast.Ident)
+		if !ok || ident.Name != name {
+			return true
+		}
+
+		// 既にctxが最初の引数として存在しているか確認
+		if len(callExpr.Args) > 0 {
+			firstArg, ok := callExpr.Args[0].(*ast.Ident)
+			if ok && firstArg.Name == "ctx" {
+				return true
+			}
+		}
+
+		// ctxを最初の引数として追加
+		ctxExpr := ast.NewIdent("ctx")
+		callExpr.Args = append([]ast.Expr{ctxExpr}, callExpr.Args...)
+		return true
+	})
 }
