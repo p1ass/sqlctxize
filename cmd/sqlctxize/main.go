@@ -77,23 +77,8 @@ func main() {
 							if named.Obj().Pkg().Path() == "database/sql" && named.Obj().Name() == "DB" {
 								if newMethod, exists := contextMethods[selExpr.Sel.Name]; exists {
 									selExpr.Sel.Name = newMethod
-
-									if ident, isIdent := selExpr.X.(*ast.Ident); isIdent && ident.Obj != nil && ident.Obj.Decl != nil {
-										if funDecl, isFuncDecl := ident.Obj.Decl.(*ast.FuncDecl); isFuncDecl {
-											ctxExpr := ast.NewIdent("ctx")
-											if isCtxAvailable(funDecl) {
-												node.Args = append([]ast.Expr{ctxExpr}, node.Args...)
-											} else {
-												addContextParam(funDecl.Type)
-												node.Args = append([]ast.Expr{&ast.CallExpr{
-													Fun: &ast.SelectorExpr{
-														X:   ast.NewIdent("context"),
-														Sel: ast.NewIdent("Background"),
-													},
-												}}, node.Args...)
-											}
-										}
-									}
+									ctxExpr := ast.NewIdent("ctx")
+									node.Args = append([]ast.Expr{ctxExpr}, node.Args...)
 								}
 							}
 						}
