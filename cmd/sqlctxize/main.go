@@ -100,7 +100,8 @@ func main() {
 					}
 				}
 			case *ast.FuncDecl:
-				if !isCtxAvailable(node) {
+				fmt.Println(hasHttpParams(node))
+				if !isCtxAvailable(node) && !hasHttpParams(node) {
 					addContextParam(node.Type)
 				}
 			}
@@ -125,6 +126,36 @@ func isCtxAvailable(funDecl *ast.FuncDecl) bool {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+func hasHttpParams(funDecl *ast.FuncDecl) bool {
+	if funDecl.Type.Params.NumFields() != 2 {
+		return false
+	}
+	firstParam, secondParam := funDecl.Type.Params.List[0], funDecl.Type.Params.List[1]
+
+	return isSelectorExprOfType(firstParam.Type, "http", "ResponseWriter") && isStarExprOfType(secondParam.Type, "http", "Request")
+}
+
+func isSelectorExprOfType(expr ast.Expr, pkg string, name string) bool {
+	if sel, ok := expr.(*ast.SelectorExpr); ok {
+		if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == pkg && sel.Sel.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func isStarExprOfType(expr ast.Expr, pkg, typeName string) bool {
+	if star, ok := expr.(*ast.StarExpr); ok {
+		fmt.Println(star.X)
+		fmt.Printf("%T\n", star.X)
+		if ident, ok := star.X.(*ast.SelectorExpr); ok {
+			return isSelectorExprOfType(ident, pkg, typeName)
+		}
+
 	}
 	return false
 }
