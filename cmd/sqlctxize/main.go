@@ -11,7 +11,7 @@ import (
 	"go/types"
 	"golang.org/x/tools/go/packages"
 	"os"
-	"path"
+	"path/filepath"
 )
 
 var overwrite = flag.Bool("w", false, "overwrite source file")
@@ -29,6 +29,7 @@ func main() {
 
 	fset := token.NewFileSet()
 	parsedFiles := []*ast.File{}
+	parsedFileNames := []string{}
 
 	for _, file := range files {
 		if file.IsDir() {
@@ -44,6 +45,7 @@ func main() {
 				return
 			}
 			parsedFiles = append(parsedFiles, node)
+			parsedFileNames = append(parsedFileNames, filename)
 		}
 	}
 
@@ -66,7 +68,7 @@ func main() {
 	}
 
 	for _, pkg := range pkgs {
-		for _, file := range parsedFiles {
+		for i, file := range parsedFiles {
 			fmt.Println(file.Name.Name)
 			ast.Inspect(file, func(n ast.Node) bool {
 				switch node := n.(type) {
@@ -115,7 +117,7 @@ func main() {
 				return
 			}
 			if *overwrite {
-				err = os.WriteFile(path.Join(dirpath, file.Name.Name+".go"), buf.Bytes(), 0)
+				err = os.WriteFile(filepath.Join(dirpath, parsedFileNames[i]), buf.Bytes(), 0664)
 				if err != nil {
 					fmt.Println("Failed to write the file:", err)
 					return
