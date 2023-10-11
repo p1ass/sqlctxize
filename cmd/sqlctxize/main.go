@@ -122,7 +122,7 @@ func isCtxAvailable(funDecl *ast.FuncDecl) bool {
 }
 
 func hasHttpParams(funDecl *ast.FuncDecl) bool {
-	if funDecl.Type.Params.NumFields() != 2 {
+	if len(funDecl.Type.Params.List) != 2 {
 		return false
 	}
 	firstParam, secondParam := funDecl.Type.Params.List[0], funDecl.Type.Params.List[1]
