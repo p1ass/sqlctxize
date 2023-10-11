@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
-	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"golang.org/x/tools/go/packages"
 	"io/ioutil"
 	"os"
 )
@@ -46,13 +46,14 @@ func main() {
 		}
 	}
 
-	conf := types.Config{Importer: importer.Default()}
-	info := &types.Info{
-		Types: map[ast.Expr]types.TypeAndValue{},
+	cfg := &packages.Config{
+		Mode: packages.LoadSyntax,
+		Dir:  dirpath,
 	}
-	_, err = conf.Check(dirpath, fset, parsedFiles, info)
+
+	pkgs, err := packages.Load(cfg, "./...")
 	if err != nil {
-		fmt.Println("Failed to type check:", err)
+		fmt.Println("Failed to load packages:", err)
 		return
 	}
 
@@ -63,46 +64,49 @@ func main() {
 		"QueryRow": "QueryRowContext",
 	}
 
-	for _, file := range parsedFiles {
-		ast.Inspect(file, func(n ast.Node) bool {
-			switch node := n.(type) {
-			case *ast.CallExpr:
-				// database/sqlのメソッド呼び出しかどうかを判定
-				if selExpr, ok := node.Fun.(*ast.SelectorExpr); ok {
-					tv, ok := info.Types[selExpr.X]
-					if !ok || tv.Type == nil {
-						return true
-					}
-					if ptr, ok := tv.Type.(*types.Pointer); ok {
-						if named, ok := ptr.Elem().(*types.Named); ok {
-							if named.Obj().Pkg().Path() == "database/sql" && named.Obj().Name() == "DB" {
-								if newMethod, exists := contextMethods[selExpr.Sel.Name]; exists {
-									selExpr.Sel.Name = newMethod
-									ctxExpr := ast.NewIdent("ctx")
-									node.Args = append([]ast.Expr{ctxExpr}, node.Args...)
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Syntax {
+
+			ast.Inspect(file, func(n ast.Node) bool {
+				switch node := n.(type) {
+				case *ast.CallExpr:
+					// database/sqlのメソッド呼び出しかどうかを判定
+					if selExpr, ok := node.Fun.(*ast.SelectorExpr); ok {
+						tv, ok := pkg.TypesInfo.Types[selExpr.X]
+						if !ok || tv.Type == nil {
+							return true
+						}
+						if ptr, ok := tv.Type.(*types.Pointer); ok {
+							if named, ok := ptr.Elem().(*types.Named); ok {
+								if named.Obj().Pkg().Path() == "database/sql" && named.Obj().Name() == "DB" {
+									if newMethod, exists := contextMethods[selExpr.Sel.Name]; exists {
+										selExpr.Sel.Name = newMethod
+										ctxExpr := ast.NewIdent("ctx")
+										node.Args = append([]ast.Expr{ctxExpr}, node.Args...)
+									}
 								}
 							}
 						}
 					}
-				}
 
-			case *ast.FuncDecl:
-				if !isCtxAvailable(node) && !hasHttpParams(node) {
-					addContextParam(node.Type)
-					modifyFuncCalls(node.Name.Name, file)
+				case *ast.FuncDecl:
+					if !isCtxAvailable(node) && !hasHttpParams(node) {
+						addContextParam(node.Type)
+						modifyFuncCalls(node.Name.Name, file)
+					}
 				}
+				return true
+			})
+
+			// ここで変更されたファイル内容を出力するか、ファイルに上書き保存することができます。
+			// この例では、変更された内容を標準出力に表示します。
+
+			var buf bytes.Buffer
+			err = format.Node(&buf, fset, file)
+			if err != nil { /* エラー処理 */
 			}
-			return true
-		})
-
-		// ここで変更されたファイル内容を出力するか、ファイルに上書き保存することができます。
-		// この例では、変更された内容を標準出力に表示します。
-
-		var buf bytes.Buffer
-		err = format.Node(&buf, fset, file)
-		if err != nil { /* エラー処理 */
+			fmt.Println(buf.String())
 		}
-		fmt.Println(buf.String())
 	}
 }
 
