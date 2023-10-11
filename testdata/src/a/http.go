@@ -7,5 +7,9 @@ func main() {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	outer()
+	subHandler()
+}
+
+func subHandler() {
+	db.Query("SELECT * FROM users WHERE id = ?", 1)
 }

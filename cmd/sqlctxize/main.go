@@ -67,6 +67,7 @@ func main() {
 		ast.Inspect(file, func(n ast.Node) bool {
 			switch node := n.(type) {
 			case *ast.CallExpr:
+				// database/sqlのメソッド呼び出しかどうかを判定
 				if selExpr, ok := node.Fun.(*ast.SelectorExpr); ok {
 					tv, ok := info.Types[selExpr.X]
 					if !ok || tv.Type == nil {
@@ -84,8 +85,8 @@ func main() {
 						}
 					}
 				}
+
 			case *ast.FuncDecl:
-				fmt.Println(hasHttpParams(node))
 				if !isCtxAvailable(node) && !hasHttpParams(node) {
 					addContextParam(node.Type)
 					modifyFuncCalls(node.Name.Name, file)

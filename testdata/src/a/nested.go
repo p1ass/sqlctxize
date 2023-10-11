@@ -10,3 +10,6 @@ func inner() {
 func outer() {
 	inner()
 }
+func outerOfOuter() {
+	inner()
+}
