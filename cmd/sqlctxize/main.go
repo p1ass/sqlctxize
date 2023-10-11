@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -9,18 +10,18 @@ import (
 	"go/token"
 	"go/types"
 	"golang.org/x/tools/go/packages"
-	"io/ioutil"
 	"os"
+	"path"
 )
 
-func main() {
-	if len(os.Args) != 2 {
-		fmt.Println("Usage: converter <directory-path>")
-		return
-	}
-	dirpath := os.Args[1]
+var overwrite = flag.Bool("w", false, "overwrite source file")
+var dir = flag.String("dir", ".", "treat argument as directory")
 
-	files, err := ioutil.ReadDir(dirpath)
+func main() {
+	flag.Parse()
+	dirpath := *dir
+
+	files, err := os.ReadDir(dirpath)
 	if err != nil {
 		fmt.Println("Failed to read directory:", err)
 		return
@@ -66,7 +67,6 @@ func main() {
 
 	for _, pkg := range pkgs {
 		for _, file := range pkg.Syntax {
-
 			ast.Inspect(file, func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.CallExpr:
@@ -90,7 +90,7 @@ func main() {
 					}
 
 				case *ast.FuncDecl:
-					if !isCtxAvailable(node) && !hasHttpParams(node) {
+					if !isCtxAvailable(node) && !hasHttpParams(node) && !hasEchoParams(node) && !isMainFunc(node) {
 						addContextParam(node.Type)
 						modifyFuncCalls(node.Name.Name, file)
 					}
@@ -98,14 +98,21 @@ func main() {
 				return true
 			})
 
-			// ここで変更されたファイル内容を出力するか、ファイルに上書き保存することができます。
-			// この例では、変更された内容を標準出力に表示します。
-
 			var buf bytes.Buffer
 			err = format.Node(&buf, fset, file)
-			if err != nil { /* エラー処理 */
+			if err != nil {
+				fmt.Println("Failed to format the file:", err)
+				return
 			}
-			fmt.Println(buf.String())
+			if *overwrite {
+				err = os.WriteFile(path.Join(dirpath, file.Name.Name+".go"), buf.Bytes(), 0)
+				if err != nil {
+					fmt.Println("Failed to write the file:", err)
+					return
+				}
+			} else {
+				fmt.Println(buf.String())
+			}
 		}
 	}
 }
@@ -128,6 +135,17 @@ func hasHttpParams(funDecl *ast.FuncDecl) bool {
 	firstParam, secondParam := funDecl.Type.Params.List[0], funDecl.Type.Params.List[1]
 
 	return isSelectorExprOfType(firstParam.Type, "http", "ResponseWriter") && isStarExprOfType(secondParam.Type, "http", "Request")
+}
+func hasEchoParams(funDecl *ast.FuncDecl) bool {
+	if len(funDecl.Type.Params.List) < 1 {
+		return false
+	}
+	firstParam := funDecl.Type.Params.List[0]
+
+	return isSelectorExprOfType(firstParam.Type, "echo", "Context") || isSelectorExprOfType(firstParam.Type, "echo", "HandlerFunc")
+}
+func isMainFunc(funDecl *ast.FuncDecl) bool {
+	return funDecl.Name.Name == "main"
 }
 
 func isSelectorExprOfType(expr ast.Expr, pkg string, name string) bool {
@@ -176,7 +194,7 @@ func modifyFuncCalls(name string, file *ast.File) {
 		// 既にctxが最初の引数として存在しているか確認
 		if len(callExpr.Args) > 0 {
 			firstArg, ok := callExpr.Args[0].(*ast.Ident)
-			if ok && firstArg.Name == "ctx" {
+			if ok && (firstArg.Name == "ctx" || firstArg.Name == "c") {
 				return true
 			}
 		}
