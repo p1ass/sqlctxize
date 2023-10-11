@@ -90,7 +90,8 @@ func main() {
 					}
 
 				case *ast.FuncDecl:
-					if !isCtxAvailable(node) && !hasHttpParams(node) && !hasEchoParams(node) && !isMainFunc(node) {
+					// ctxを引数に追加する処理
+					if !hasHttpParams(node) && !hasEchoParams(node) && !isMainFunc(node) {
 						addContextParam(node.Type)
 						modifyFuncCalls(node.Name.Name, file)
 					}
@@ -186,8 +187,18 @@ func modifyFuncCalls(name string, file *ast.File) {
 			return true
 		}
 
-		ident, ok := callExpr.Fun.(*ast.Ident)
-		if !ok || ident.Name != name {
+		switch fun := callExpr.Fun.(type) {
+		// メソッド
+		case *ast.SelectorExpr:
+			if fun.Sel.Name != name {
+				return true
+			}
+		// 関数
+		case *ast.Ident:
+			if fun.Name != name {
+				return true
+			}
+		default:
 			return true
 		}
 
