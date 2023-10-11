@@ -66,7 +66,8 @@ func main() {
 	}
 
 	for _, pkg := range pkgs {
-		for _, file := range pkg.Syntax {
+		for _, file := range parsedFiles {
+			fmt.Println(file.Name.Name)
 			ast.Inspect(file, func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.CallExpr:
@@ -91,7 +92,7 @@ func main() {
 
 				case *ast.FuncDecl:
 					// ctxを引数に追加する処理
-					if !isCtxAvailable(node) && !hasHttpParams(node) && !hasEchoParams(node) && !isMainFunc(node) {
+					if !hasHttpParams(node) && !hasEchoParams(node) && !isMainFunc(node) {
 						addContextParam(node.Type)
 						modifyFuncCalls(node.Name.Name, file)
 					}
