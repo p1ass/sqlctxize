@@ -37,10 +37,10 @@ func main() {
 
 		filename := file.Name()
 		if ext := ".go"; len(filename) > len(ext) && filename[len(filename)-len(ext):] == ext {
-			path := dirpath + "/" + filename
-			node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+			p := dirpath + "/" + filename
+			node, err := parser.ParseFile(fset, p, nil, parser.ParseComments)
 			if err != nil {
-				fmt.Printf("Failed to parse the file %s: %v\n", path, err)
+				fmt.Printf("Failed to parse the file %s: %v\n", p, err)
 				return
 			}
 			parsedFiles = append(parsedFiles, node)
@@ -91,7 +91,7 @@ func main() {
 
 				case *ast.FuncDecl:
 					// ctxを引数に追加する処理
-					if !hasHttpParams(node) && !hasEchoParams(node) && !isMainFunc(node) {
+					if !isCtxAvailable(node) && !hasHttpParams(node) && !hasEchoParams(node) && !isMainFunc(node) {
 						addContextParam(node.Type)
 						modifyFuncCalls(node.Name.Name, file)
 					}
@@ -99,6 +99,9 @@ func main() {
 					// hasHttpParams がtrueの場合は関数のBodyの先頭に ctx := r.Context() を追加する
 					if hasHttpParams(node) {
 						addCtxVariableFromHttpRequest(node)
+					}
+					if hasEchoParams(node) {
+						addCtxVariableFromEchoContext(node)
 					}
 				}
 				return true
@@ -129,6 +132,28 @@ func addCtxVariableFromHttpRequest(node *ast.FuncDecl) {
 	rExpr := &ast.CallExpr{
 		Fun: &ast.SelectorExpr{
 			X:   ast.NewIdent("r"),
+			Sel: ast.NewIdent("Context"),
+		},
+	}
+	assignStmt := &ast.AssignStmt{
+		Lhs: []ast.Expr{ctxExpr},
+		Tok: token.DEFINE,
+		Rhs: []ast.Expr{rExpr},
+	}
+	node.Body.List = append([]ast.Stmt{assignStmt}, node.Body.List...)
+}
+
+// 関数のBodyの先頭に ctx := c.Request().Context() を追加する
+func addCtxVariableFromEchoContext(node *ast.FuncDecl) {
+	ctxExpr := ast.NewIdent("ctx")
+	rExpr := &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X: &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent("c"),
+					Sel: ast.NewIdent("Request"),
+				},
+			},
 			Sel: ast.NewIdent("Context"),
 		},
 	}
