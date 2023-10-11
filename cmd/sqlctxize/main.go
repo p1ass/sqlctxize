@@ -95,6 +95,11 @@ func main() {
 						addContextParam(node.Type)
 						modifyFuncCalls(node.Name.Name, file)
 					}
+
+					// hasHttpParams がtrueの場合は関数のBodyの先頭に ctx := r.Context() を追加する
+					if hasHttpParams(node) {
+						addCtxVariableFromHttpRequest(node)
+					}
 				}
 				return true
 			})
@@ -116,6 +121,23 @@ func main() {
 			}
 		}
 	}
+}
+
+// 関数のBodyの先頭に ctx := r.Context() を追加する
+func addCtxVariableFromHttpRequest(node *ast.FuncDecl) {
+	ctxExpr := ast.NewIdent("ctx")
+	rExpr := &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X:   ast.NewIdent("r"),
+			Sel: ast.NewIdent("Context"),
+		},
+	}
+	assignStmt := &ast.AssignStmt{
+		Lhs: []ast.Expr{ctxExpr},
+		Tok: token.DEFINE,
+		Rhs: []ast.Expr{rExpr},
+	}
+	node.Body.List = append([]ast.Stmt{assignStmt}, node.Body.List...)
 }
 
 func isCtxAvailable(funDecl *ast.FuncDecl) bool {
