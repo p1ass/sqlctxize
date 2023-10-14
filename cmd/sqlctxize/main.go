@@ -69,6 +69,8 @@ func main() {
 
 	for _, pkg := range pkgs {
 		for i, file := range parsedFiles {
+			file = addContextImport(file)
+
 			ast.Inspect(file, func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.CallExpr:
@@ -274,4 +276,33 @@ func modifyFuncCalls(name string, file *ast.File) {
 		callExpr.Args = append([]ast.Expr{ctxExpr}, callExpr.Args...)
 		return true
 	})
+}
+
+func addContextImport(file *ast.File) *ast.File {
+	contextImported := false
+	for _, imp := range file.Imports {
+		if imp.Path.Value == "\"context\"" {
+			contextImported = true
+			break
+		}
+	}
+	fmt.Println(contextImported)
+
+	if !contextImported {
+		// contextパッケージがimportされていない場合、追加する
+		newImport := &ast.ImportSpec{
+			Path: &ast.BasicLit{
+				Kind:  token.STRING,
+				Value: "\"context\"",
+			},
+		}
+		file.Decls = append([]ast.Decl{
+			&ast.GenDecl{
+				Tok:   token.IMPORT,
+				Specs: []ast.Spec{newImport},
+			},
+		}, file.Decls...)
+	}
+
+	return file
 }
