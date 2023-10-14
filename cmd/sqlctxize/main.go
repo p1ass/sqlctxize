@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
-	"go/parser"
 	"go/token"
 	"go/types"
 	"golang.org/x/tools/go/packages"
@@ -40,33 +39,7 @@ func main() {
 	flag.Parse()
 	dirpath := *dir
 
-	files, err := os.ReadDir(dirpath)
-	if err != nil {
-		fmt.Println("Failed to read directory:", err)
-		return
-	}
-
 	fset := token.NewFileSet()
-	parsedFiles := []*ast.File{}
-	parsedFileNames := []string{}
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-
-		filename := file.Name()
-		if ext := ".go"; len(filename) > len(ext) && filename[len(filename)-len(ext):] == ext {
-			p := dirpath + "/" + filename
-			node, err := parser.ParseFile(fset, p, nil, parser.ParseComments)
-			if err != nil {
-				fmt.Printf("Failed to parse the file %s: %v\n", p, err)
-				return
-			}
-			parsedFiles = append(parsedFiles, node)
-			parsedFileNames = append(parsedFileNames, filename)
-		}
-	}
 
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedTypes | packages.NeedTypesSizes | packages.NeedSyntax | packages.NeedTypesInfo,
