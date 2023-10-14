@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/k0kubun/pp/v3"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -113,9 +112,7 @@ func main() {
 					if funSelExpr, ok := node.Fun.(*ast.SelectorExpr); ok {
 						if selType := pkg.TypesInfo.TypeOf(funSelExpr.X); selType != nil {
 							recvTypeStr := strings.TrimPrefix(selType.String(), "*")
-							pp.Println(recvTypeStr)
-							pp.Println(funSelExpr.Sel.Name)
-							if newMethod, exists := sqlxMethods[funSelExpr.Sel.Name]; recvTypeStr == "github.com/jmoiron/sqlx.DB" && exists {
+							if newMethod, exists := sqlxMethods[funSelExpr.Sel.Name]; strings.Contains(recvTypeStr, "github.com/jmoiron/sqlx") && exists {
 								funSelExpr.Sel.Name = newMethod
 								ctxExpr := ast.NewIdent("ctx")
 								node.Args = append([]ast.Expr{ctxExpr}, node.Args...)
