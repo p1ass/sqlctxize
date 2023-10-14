@@ -122,7 +122,7 @@ func main() {
 
 				case *ast.FuncDecl:
 					// ctxを引数に追加する処理
-					if !hasHttpParams(node) && !hasEchoHandlerParams(node) && !hasEchoMiddlewareParams(node) && !isMainFunc(node) {
+					if !isCtxAvailable(node) && !hasHttpParams(node) && !hasEchoHandlerParams(node) && !hasEchoMiddlewareParams(node) && !isMainFunc(node) {
 						addContextParam(node.Type)
 						modifyFuncCalls(node.Name.Name, file)
 					}
