@@ -286,7 +286,6 @@ func addContextImport(file *ast.File) *ast.File {
 			break
 		}
 	}
-	fmt.Println(contextImported)
 
 	if !contextImported {
 		// contextパッケージがimportされていない場合、追加する
