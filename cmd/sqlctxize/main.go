@@ -95,7 +95,7 @@ func main() {
 
 				case *ast.FuncDecl:
 					// ctxを引数に追加する処理
-					if !isCtxAvailable(node) && !hasHttpParams(node) && !hasEchoHandlerParams(node) && !hasEchoMiddlewareParams(node) && !isMainFunc(node) {
+					if !isCtxAvailable(node) && !hasHttpParams(node) && !hasEchoHandlerParams(node) && !hasEchoMiddlewareParams(node) && !isReservedFunc(node) {
 						addContextParam(node.Type)
 						modifyFuncCalls(node.Name.Name, file)
 					}
@@ -225,8 +225,8 @@ func hasEchoMiddlewareParams(funDecl *ast.FuncDecl) bool {
 	return isSelectorExprOfType(firstParam.Type, "echo", "HandlerFunc")
 }
 
-func isMainFunc(funDecl *ast.FuncDecl) bool {
-	return funDecl.Name.Name == "main"
+func isReservedFunc(funDecl *ast.FuncDecl) bool {
+	return funDecl.Name.Name == "main" || funDecl.Name.Name == "init"
 }
 
 func isSelectorExprOfType(expr ast.Expr, pkg string, name string) bool {
