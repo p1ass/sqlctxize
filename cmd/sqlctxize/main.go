@@ -132,7 +132,12 @@ func main() {
 						addCtxVariableFromHttpRequest(node)
 					}
 					if hasEchoHandlerParams(node) {
-						addCtxVariableFromEchoContext(node)
+						addCtxVariableFromEchoContext(node.Body)
+					}
+				case *ast.FuncLit:
+					// 関数リテラルの場合は関数のBodyの先頭に ctx := c.Request().Context() を追加する
+					if hasEchoHandlerParamsFuncType(node.Type) {
+						addCtxVariableFromEchoContext(node.Body)
 					}
 				}
 				return true
@@ -180,7 +185,7 @@ func addCtxVariableFromHttpRequest(node *ast.FuncDecl) {
 }
 
 // 関数のBodyの先頭に ctx := c.Request().Context() を追加する
-func addCtxVariableFromEchoContext(node *ast.FuncDecl) {
+func addCtxVariableFromEchoContext(body *ast.BlockStmt) {
 	ctxExpr := ast.NewIdent("ctx")
 	rExpr := &ast.CallExpr{
 		Fun: &ast.SelectorExpr{
@@ -198,7 +203,7 @@ func addCtxVariableFromEchoContext(node *ast.FuncDecl) {
 		Tok: token.DEFINE,
 		Rhs: []ast.Expr{rExpr},
 	}
-	node.Body.List = append([]ast.Stmt{assignStmt}, node.Body.List...)
+	body.List = append([]ast.Stmt{assignStmt}, body.List...)
 }
 
 func isCtxAvailable(funDecl *ast.FuncDecl) bool {
@@ -229,6 +234,15 @@ func hasEchoHandlerParams(funDecl *ast.FuncDecl) bool {
 
 	return isSelectorExprOfType(firstParam.Type, "echo", "Context")
 }
+func hasEchoHandlerParamsFuncType(funcType *ast.FuncType) bool {
+	if len(funcType.Params.List) < 1 {
+		return false
+	}
+	firstParam := funcType.Params.List[0]
+
+	return isSelectorExprOfType(firstParam.Type, "echo", "Context")
+}
+
 func hasEchoMiddlewareParams(funDecl *ast.FuncDecl) bool {
 	if len(funDecl.Type.Params.List) < 1 {
 		return false
