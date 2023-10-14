@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"github.com/k0kubun/pp/v3"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -11,11 +12,30 @@ import (
 	"go/types"
 	"golang.org/x/tools/go/packages"
 	"os"
-	"path/filepath"
+	"strings"
 )
 
 var overwrite = flag.Bool("w", false, "overwrite source file")
 var dir = flag.String("dir", ".", "treat argument as directory")
+
+var stdDBMethods = map[string]string{
+	"Query":    "QueryContext",
+	"Exec":     "ExecContext",
+	"Prepare":  "PrepareContext",
+	"QueryRow": "QueryRowContext",
+}
+
+var sqlxMethods = map[string]string{
+	"Connect":      "ConnectContext",
+	"Get":          "GetContext",
+	"MustExec":     "MustExecContext",
+	"NamedExec":    "NamedExecContext",
+	"NamedQuery":   "NamedQueryContext",
+	"PrepareNamed": "PrepareNamedContext",
+	"QueryRowx":    "QueryRowxContext",
+	"Queryx":       "QueryxContext",
+	"Select":       "SelectContext",
+}
 
 func main() {
 	flag.Parse()
@@ -50,7 +70,7 @@ func main() {
 	}
 
 	cfg := &packages.Config{
-		Mode: packages.LoadSyntax,
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedTypes | packages.NeedTypesSizes | packages.NeedSyntax | packages.NeedTypesInfo,
 		Dir:  dirpath,
 	}
 
@@ -60,15 +80,13 @@ func main() {
 		return
 	}
 
-	contextMethods := map[string]string{
-		"Query":    "QueryContext",
-		"Exec":     "ExecContext",
-		"Prepare":  "PrepareContext",
-		"QueryRow": "QueryRowContext",
-	}
-
 	for _, pkg := range pkgs {
-		for i, file := range parsedFiles {
+		if len(pkg.Errors) > 0 {
+			fmt.Fprintln(os.Stderr, "Errors loading package:", pkg.Errors)
+			continue
+		}
+
+		for _, file := range pkg.Syntax {
 			file = addContextImport(file)
 
 			ast.Inspect(file, func(n ast.Node) bool {
@@ -77,18 +95,30 @@ func main() {
 					// database/sqlのメソッド呼び出しかどうかを判定
 					if selExpr, ok := node.Fun.(*ast.SelectorExpr); ok {
 						tv, ok := pkg.TypesInfo.Types[selExpr.X]
-						if !ok || tv.Type == nil {
-							return true
-						}
-						if ptr, ok := tv.Type.(*types.Pointer); ok {
-							if named, ok := ptr.Elem().(*types.Named); ok {
-								if named.Obj().Pkg().Path() == "database/sql" && named.Obj().Name() == "DB" {
-									if newMethod, exists := contextMethods[selExpr.Sel.Name]; exists {
-										selExpr.Sel.Name = newMethod
-										ctxExpr := ast.NewIdent("ctx")
-										node.Args = append([]ast.Expr{ctxExpr}, node.Args...)
+						if ok && tv.Type != nil {
+							if ptr, ok := tv.Type.(*types.Pointer); ok {
+								if named, ok := ptr.Elem().(*types.Named); ok {
+									if named.Obj().Pkg().Path() == "database/sql" && named.Obj().Name() == "DB" {
+										if newMethod, exists := stdDBMethods[selExpr.Sel.Name]; exists {
+											selExpr.Sel.Name = newMethod
+											ctxExpr := ast.NewIdent("ctx")
+											node.Args = append([]ast.Expr{ctxExpr}, node.Args...)
+										}
 									}
 								}
+							}
+						}
+					}
+					// sqlxのメソッド呼び出しかどうかを判定
+					if funSelExpr, ok := node.Fun.(*ast.SelectorExpr); ok {
+						if selType := pkg.TypesInfo.TypeOf(funSelExpr.X); selType != nil {
+							recvTypeStr := strings.TrimPrefix(selType.String(), "*")
+							pp.Println(recvTypeStr)
+							pp.Println(funSelExpr.Sel.Name)
+							if newMethod, exists := sqlxMethods[funSelExpr.Sel.Name]; recvTypeStr == "github.com/jmoiron/sqlx.DB" && exists {
+								funSelExpr.Sel.Name = newMethod
+								ctxExpr := ast.NewIdent("ctx")
+								node.Args = append([]ast.Expr{ctxExpr}, node.Args...)
 							}
 						}
 					}
@@ -111,19 +141,24 @@ func main() {
 				return true
 			})
 
-			var buf bytes.Buffer
-			err = format.Node(&buf, fset, file)
-			if err != nil {
-				fmt.Println("Failed to format the file:", err)
-				return
-			}
 			if *overwrite {
-				err = os.WriteFile(filepath.Join(dirpath, parsedFileNames[i]), buf.Bytes(), 0664)
+				fileName := pkg.Fset.File(file.Pos()).Name()
+				var buf bytes.Buffer
+				err = format.Node(&buf, pkg.Fset, file)
 				if err != nil {
-					fmt.Println("Failed to write the file:", err)
-					return
+					fmt.Fprintln(os.Stderr, "Error formatting code:", err)
+					continue
+				}
+				if err := os.WriteFile(fileName, buf.Bytes(), 0664); err != nil {
+					fmt.Fprintln(os.Stderr, "Error writing to file:", err)
 				}
 			} else {
+				var buf bytes.Buffer
+				err = format.Node(&buf, fset, file)
+				if err != nil {
+					fmt.Println("Failed to format the file:", err)
+					return
+				}
 				fmt.Println(buf.String())
 			}
 		}
