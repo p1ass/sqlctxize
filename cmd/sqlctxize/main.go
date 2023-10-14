@@ -93,7 +93,7 @@ func main() {
 
 				case *ast.FuncDecl:
 					// ctxを引数に追加する処理
-					if !hasHttpParams(node) && !hasEchoParams(node) && !isMainFunc(node) {
+					if !hasHttpParams(node) && !hasEchoHandlerParams(node) && !hasEchoMiddlewareParams(node) && !isMainFunc(node) {
 						addContextParam(node.Type)
 						modifyFuncCalls(node.Name.Name, file)
 					}
@@ -102,7 +102,7 @@ func main() {
 					if hasHttpParams(node) {
 						addCtxVariableFromHttpRequest(node)
 					}
-					if hasEchoParams(node) {
+					if hasEchoHandlerParams(node) {
 						addCtxVariableFromEchoContext(node)
 					}
 				}
@@ -186,14 +186,24 @@ func hasHttpParams(funDecl *ast.FuncDecl) bool {
 
 	return isSelectorExprOfType(firstParam.Type, "http", "ResponseWriter") && isStarExprOfType(secondParam.Type, "http", "Request")
 }
-func hasEchoParams(funDecl *ast.FuncDecl) bool {
+
+func hasEchoHandlerParams(funDecl *ast.FuncDecl) bool {
 	if len(funDecl.Type.Params.List) < 1 {
 		return false
 	}
 	firstParam := funDecl.Type.Params.List[0]
 
-	return isSelectorExprOfType(firstParam.Type, "echo", "Context") || isSelectorExprOfType(firstParam.Type, "echo", "HandlerFunc")
+	return isSelectorExprOfType(firstParam.Type, "echo", "Context")
 }
+func hasEchoMiddlewareParams(funDecl *ast.FuncDecl) bool {
+	if len(funDecl.Type.Params.List) < 1 {
+		return false
+	}
+	firstParam := funDecl.Type.Params.List[0]
+
+	return isSelectorExprOfType(firstParam.Type, "echo", "HandlerFunc")
+}
+
 func isMainFunc(funDecl *ast.FuncDecl) bool {
 	return funDecl.Name.Name == "main"
 }
