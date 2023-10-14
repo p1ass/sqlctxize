@@ -69,7 +69,6 @@ func main() {
 
 	for _, pkg := range pkgs {
 		for i, file := range parsedFiles {
-			fmt.Println(file.Name.Name)
 			ast.Inspect(file, func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.CallExpr:
