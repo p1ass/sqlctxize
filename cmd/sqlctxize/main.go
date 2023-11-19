@@ -33,6 +33,7 @@ var sqlxMethods = map[string]string{
 	"QueryRowx":    "QueryRowxContext",
 	"Queryx":       "QueryxContext",
 	"Select":       "SelectContext",
+	"Exec":         "ExecContext",
 }
 
 func main() {
