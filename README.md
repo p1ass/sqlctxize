@@ -3,6 +3,6 @@
 ## Execute
 
 ```bash
-go build ./cmd/sqlctxize 
-./sqlctxize ./testdata/src/a
+go install ./cmd/sqlctxize 
+sqlctxize -w -dir ./testdata/src/a
 ```
