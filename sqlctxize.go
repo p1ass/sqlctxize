@@ -151,7 +151,7 @@ type rewriter struct {
 	sites  []*site
 	calls  map[*ast.Ident]bool
 	values map[string]bool
-	ifaces []*types.Interface
+	ifaces map[*types.Interface]bool
 
 	addParam map[string]bool
 }
@@ -161,6 +161,7 @@ func newRewriter() *rewriter {
 		decls:    map[string]*funcDecl{},
 		calls:    map[*ast.Ident]bool{},
 		values:   map[string]bool{},
+		ifaces:   map[*types.Interface]bool{},
 		addParam: map[string]bool{},
 	}
 }
@@ -189,11 +190,11 @@ func (r *rewriter) collectInterfaces(pkg *types.Package) {
 	scope := pkg.Scope()
 	for _, name := range scope.Names() {
 		tn, ok := scope.Lookup(name).(*types.TypeName)
-		if !ok || !tn.Exported() && tn.Pkg() != pkg {
+		if !ok {
 			continue
 		}
-		if iface, ok := tn.Type().Underlying().(*types.Interface); ok && iface.NumMethods() > 0 && !slices.Contains(r.ifaces, iface) {
-			r.ifaces = append(r.ifaces, iface)
+		if iface, ok := tn.Type().Underlying().(*types.Interface); ok && iface.NumMethods() > 0 {
+			r.ifaces[iface] = true
 		}
 	}
 }
@@ -209,7 +210,7 @@ func (r *rewriter) collectDecls(fl *file) {
 		if !ok {
 			continue
 		}
-		r.decls[funcKey(obj)] = &funcDecl{decl: fd, file: fl, addable: r.canAddParam(fl, fd, obj)}
+		r.decls[funcKey(obj)] = &funcDecl{decl: fd, file: fl}
 	}
 	ast.Inspect(fl.ast, func(n ast.Node) bool {
 		if call, ok := n.(*ast.CallExpr); ok {
@@ -240,7 +241,7 @@ func (r *rewriter) canAddParam(fl *file, fd *ast.FuncDecl, obj *types.Func) bool
 	if !ok || named.TypeParams().Len() > 0 {
 		return true
 	}
-	for _, iface := range r.ifaces {
+	for iface := range r.ifaces {
 		if m, _, _ := types.LookupFieldOrMethod(iface, false, nil, obj.Name()); m == nil {
 			continue
 		}
@@ -337,11 +338,9 @@ func (r *rewriter) plan() {
 			}
 		}
 	}
-	for _, d := range r.decls {
-		key := funcKey(d.file.pkg.TypesInfo.Defs[d.decl.Name].(*types.Func))
-		if r.values[key] {
-			d.addable = false
-		}
+	for key, d := range r.decls {
+		obj := d.file.pkg.TypesInfo.Defs[d.decl.Name].(*types.Func)
+		d.addable = !r.values[key] && r.canAddParam(d.file, d.decl, obj)
 	}
 	for changed := true; changed; {
 		changed = false

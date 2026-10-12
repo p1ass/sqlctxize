@@ -23,6 +23,7 @@ func TestRewrite(t *testing.T) {
 		{dir: "funclit"},
 		{dir: "tx"},
 		{dir: "handlers"},
+		{dir: "iface"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.dir, func(t *testing.T) {

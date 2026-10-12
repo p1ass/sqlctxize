@@ -1,0 +1,19 @@
+package a
+
+import (
+	"context"
+	"github.com/jmoiron/sqlx"
+)
+
+var DB *sqlx.DB
+
+type User struct {
+	ID int64
+}
+
+func (u User) Name() string {
+	ctx := context.Background()
+	var name string
+	_ = DB.GetContext(ctx, &name, "SELECT name FROM users WHERE id = ?", u.ID)
+	return name
+}
