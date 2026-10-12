@@ -1,0 +1,111 @@
+package tx
+
+import (
+	"context"
+	"database/sql"
+
+	"github.com/jmoiron/sqlx"
+)
+
+var db *sqlx.DB
+
+type User struct {
+	ID   int64  `db:"id"`
+	Name string `db:"name"`
+}
+
+func sqlxTx(ctx context.Context, ids []int64) error {
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var u User
+	if err := tx.GetContext(ctx, &u, tx.Rebind("SELECT * FROM users WHERE id = ?"), 1); err != nil {
+		return err
+	}
+	if _, err := tx.NamedExecContext(ctx, "INSERT INTO users (name) VALUES (:name)", u); err != nil {
+		return err
+	}
+	rows, err := tx.NamedQuery("SELECT * FROM users WHERE name = :name", u)
+	if err != nil {
+		return err
+	}
+	rows.Close()
+	if err := tx.QueryRowxContext(ctx, "SELECT * FROM users LIMIT 1").StructScan(&u); err != nil {
+		return err
+	}
+	tx.MustExecContext(ctx, "DELETE FROM users WHERE id = ?", u.ID)
+	stmt, err := tx.PreparexContext(ctx, "SELECT * FROM users WHERE id = ?")
+	if err != nil {
+		return err
+	}
+	if err := stmt.GetContext(ctx, &u, 1); err != nil {
+		return err
+	}
+	query, args, err := sqlx.In("SELECT * FROM users WHERE id IN (?)", ids)
+	if err != nil {
+		return err
+	}
+	var us []User
+	if err := tx.SelectContext(ctx, &us, tx.Rebind(query), args...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func mustBegin(ctx context.Context) error {
+	tx := db.MustBeginTx(ctx, nil)
+	tx.MustExecContext(ctx, "DELETE FROM users")
+	return tx.Commit()
+}
+
+func dbCalls(ctx context.Context) error {
+	var u User
+	if _, err := db.NamedExecContext(ctx, "INSERT INTO users (name) VALUES (:name)", u); err != nil {
+		return err
+	}
+	rows, err := db.NamedQueryContext(ctx, "SELECT * FROM users WHERE name = :name", u)
+	if err != nil {
+		return err
+	}
+	rows.Close()
+	xrows, err := db.QueryxContext(ctx, "SELECT * FROM users")
+	if err != nil {
+		return err
+	}
+	xrows.Close()
+	if err := db.QueryRowxContext(ctx, "SELECT * FROM users LIMIT 1").StructScan(&u); err != nil {
+		return err
+	}
+	stmt, err := db.PreparexContext(ctx, "SELECT * FROM users WHERE id = ?")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	return sqlx.GetContext(ctx, db, &u, "SELECT * FROM users LIMIT 1")
+}
+
+func stdTx(ctx context.Context, sdb *sql.DB) error {
+	if err := sdb.PingContext(ctx); err != nil {
+		return err
+	}
+	tx, err := sdb.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM users"); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	stmt, err := sdb.PrepareContext(ctx, "SELECT COUNT(*) FROM users WHERE id = ?")
+	if err != nil {
+		return err
+	}
+	var n int
+	if err := stmt.QueryRowContext(ctx, 1).Scan(&n); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
