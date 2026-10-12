@@ -1,0 +1,48 @@
+package main
+
+import (
+	"context"
+	"log"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
+)
+
+var db *sqlx.DB
+
+var userCount = countUsers(context.Background())
+
+func init() {
+	ctx := context.Background()
+	db = sqlx.MustOpen("mysql", "isucon:isucon@/isucon")
+	db.MustExecContext(ctx, "SET time_zone = '+00:00'")
+}
+
+func main() {
+	ctx := context.Background()
+	if err := db.PingContext(ctx); err != nil {
+		log.Fatal(err)
+	}
+	if err := initData(ctx); err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		_ = refresh(ctx)
+	}()
+	log.Println(userCount)
+}
+
+func initData(ctx context.Context) error {
+	_, err := db.ExecContext(ctx, "TRUNCATE users")
+	return err
+}
+
+func refresh(ctx context.Context) error {
+	return db.PingContext(ctx)
+}
+
+func countUsers(ctx context.Context) int {
+	var n int
+	_ = db.GetContext(ctx, &n, "SELECT COUNT(*) FROM users")
+	return n
+}
