@@ -20,6 +20,7 @@ func TestRewrite(t *testing.T) {
 		{dir: "basic"},
 		{dir: "selection", exclude: []string{"excluded"}},
 		{dir: "entrypoint"},
+		{dir: "funclit"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.dir, func(t *testing.T) {
