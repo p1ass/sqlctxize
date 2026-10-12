@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/imports"
 )
 
 type Options struct {
@@ -578,5 +579,5 @@ func (f *file) apply() ([]byte, error) {
 		}
 		out = buf.Bytes()
 	}
-	return format.Source(out)
+	return imports.Process(f.path, out, &imports.Options{Comments: true, TabIndent: true, TabWidth: 8, FormatOnly: true})
 }
