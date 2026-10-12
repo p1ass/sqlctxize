@@ -48,6 +48,9 @@ func Rewrite(opts Options) ([]FileResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load packages: %w", err)
 	}
+	if len(pkgs) == 0 {
+		return nil, fmt.Errorf("no Go packages found in %s; check that go list ./... succeeds there", root)
+	}
 	if err := checkPackages(pkgs); err != nil {
 		return nil, err
 	}

@@ -112,3 +112,13 @@ func TestTooNewError(t *testing.T) {
 		}
 	}
 }
+
+func TestRewriteWithoutPackages(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/empty\n\ngo 1.26.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Rewrite(Options{Dir: dir}); err == nil || !strings.Contains(err.Error(), "no Go packages found") {
+		t.Errorf("Rewrite() error = %v, want an error about missing packages", err)
+	}
+}
