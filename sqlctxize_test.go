@@ -18,6 +18,7 @@ func TestRewrite(t *testing.T) {
 		exclude []string
 	}{
 		{dir: "basic"},
+		{dir: "selection", exclude: []string{"excluded"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.dir, func(t *testing.T) {
