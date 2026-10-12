@@ -1,0 +1,106 @@
+package handlers
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/labstack/echo/v4"
+)
+
+var dbConn *sqlx.DB
+
+type Livestream struct {
+	ID    int64 `db:"id"`
+	Owner int64 `db:"owner_id"`
+}
+
+type LivestreamResponse struct {
+	ID        int64
+	OwnerName string
+}
+
+func Register(e *echo.Echo, mux *http.ServeMux) {
+	e.GET("/api/livestream", getLivestreamsHandler)
+	e.GET("/api/ping", pingHandler)
+	mux.HandleFunc("/api/count", countHandler)
+	mux.HandleFunc("/api/inline", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		fmt.Fprint(w, countUsers(ctx))
+	})
+	mux.Handle("/api/server", &server{})
+	run(cleanup)
+}
+
+func getLivestreamsHandler(c echo.Context) error {
+	ctx := c.Request().Context()
+	tx, err := dbConn.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var ls []Livestream
+	if err := tx.SelectContext(ctx, &ls, "SELECT * FROM livestreams"); err != nil {
+		return err
+	}
+	resps := make([]LivestreamResponse, 0, len(ls))
+	for _, l := range ls {
+		resp, err := fillLivestreamResponse(ctx, tx, l)
+		if err != nil {
+			return err
+		}
+		resps = append(resps, resp)
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, resps)
+}
+
+func pingHandler(ctx echo.Context) error {
+	return dbConn.PingContext(ctx.Request().Context())
+}
+
+func fillLivestreamResponse(ctx context.Context, tx *sqlx.Tx, l Livestream) (LivestreamResponse, error) {
+	var name string
+	if err := tx.GetContext(ctx, &name, "SELECT name FROM users WHERE id = ?", l.Owner); err != nil {
+		return LivestreamResponse{}, err
+	}
+	return LivestreamResponse{ID: l.ID, OwnerName: name}, nil
+}
+
+func countHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	fmt.Fprint(w, countUsers(ctx))
+}
+
+type server struct{}
+
+func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	fmt.Fprint(w, countUsers(ctx))
+}
+
+type report struct{}
+
+func (report) String() string {
+	ctx := context.Background()
+	return fmt.Sprint(countUsers(ctx))
+}
+
+func countUsers(ctx context.Context) int {
+	var n int
+	_ = dbConn.GetContext(ctx, &n, "SELECT COUNT(*) FROM users")
+	return n
+}
+
+func run(f func()) {
+	f()
+}
+
+func cleanup() {
+	ctx := context.Background()
+	dbConn.MustExecContext(ctx, "DELETE FROM sessions")
+}
