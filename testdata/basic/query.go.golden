@@ -1,0 +1,15 @@
+package a
+
+import "context"
+
+func query(ctx context.Context) {
+	_, err := db.QueryContext(ctx, "SELECT * FROM users WHERE id = ?", 1)
+	if err != nil {
+		return
+	}
+}
+
+func falsyQuery() {
+	Query := func() {}
+	Query()
+}
