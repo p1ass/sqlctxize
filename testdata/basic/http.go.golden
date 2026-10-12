@@ -1,0 +1,19 @@
+package a
+
+import (
+	"context"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/", handler)
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	subHandler(ctx)
+}
+
+func subHandler(ctx context.Context) {
+	db.QueryContext(ctx, "SELECT * FROM users WHERE id = ?", 1)
+}

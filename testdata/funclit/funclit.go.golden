@@ -1,0 +1,52 @@
+package funclit
+
+import (
+	"context"
+	"net/http"
+	"sync"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/labstack/echo/v4"
+	"golang.org/x/sync/errgroup"
+)
+
+var db *sqlx.DB
+
+var once sync.Once
+
+func updateAll(ids []int64) error {
+	eg, ctx := errgroup.WithContext(context.Background())
+	for _, id := range ids {
+		eg.Go(func() error { _, err := db.ExecContext(ctx, "UPDATE users SET seen = 1 WHERE id = ?", id); return err })
+	}
+	<-ctx.Done()
+	return eg.Wait()
+}
+
+func pingAll(ctx context.Context) error {
+	var eg errgroup.Group
+	eg.Go(func() error { return db.PingContext(ctx) })
+	return eg.Wait()
+}
+
+func loadMaster(ctx context.Context) {
+	once.Do(func() { db.MustExecContext(ctx, "SELECT 1") })
+}
+
+func register(e *echo.Echo) {
+	e.GET("/health", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	e.GET("/count", func(c echo.Context) error {
+		ctx := c.Request().Context()
+		var n int
+		return db.GetContext(ctx, &n, "SELECT COUNT(*) FROM users")
+	})
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			ctx := c.Request().Context()
+			if err := db.PingContext(ctx); err != nil {
+				return err
+			}
+			return next(c)
+		}
+	})
+}

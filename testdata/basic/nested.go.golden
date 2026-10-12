@@ -1,0 +1,17 @@
+package a
+
+import "context"
+
+func inner(ctx context.Context) {
+	_, err := db.QueryContext(ctx, "SELECT * FROM users WHERE id = ?", 1)
+	if err != nil {
+		return
+	}
+}
+
+func outer(ctx context.Context) {
+	inner(ctx)
+}
+func outerOfOuter(ctx context.Context) {
+	inner(ctx)
+}
